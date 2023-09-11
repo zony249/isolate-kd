@@ -217,6 +217,9 @@ if __name__ == "__main__":
     parser.add_argument("--val-interval", type=str, default=500, help="How many steps between validations. After each validation,"
                                                                        "a checkpoint will be created.")
     parser.add_argument("--rebuild-dataset", action="store_true")
+    parser.add_argument("--hidden-d", type=int, default=768)
+    parser.add_argument("--model-d", type=int, default=3072)
+    parser.add_argument("--num-layers", type=int, default=12)
 
     args = parser.parse_args()
 
@@ -233,7 +236,10 @@ if __name__ == "__main__":
                 output_dir=args.output_dir, 
                 exp_name=args.exp_name, 
                 val_interval=args.val_interval, 
-                rebuild_dataset=args.rebuild_dataset)
+                rebuild_dataset=args.rebuild_dataset,
+                hidden_d=args.hidden_d, 
+                model_d=args.model_d, 
+                num_layers=args.num_layers)
 
     if Env.exp_name is None:
         Env.exp_name = time.ctime(time.time()) 
