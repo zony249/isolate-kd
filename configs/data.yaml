@@ -1,0 +1,7 @@
+mnli:
+  base: ./data/MNLI/
+  train: ./data/MNLI/original/multinli_1.0_train.jsonl 
+  dev: ./data/MNLI/original/multinli_1.0_dev_matched.jsonl 
+wiki: 
+  base: wikipedia 
+  split: 20220301.en

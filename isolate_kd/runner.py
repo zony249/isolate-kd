@@ -15,9 +15,9 @@ from torch.optim import AdamW, Adam, SGD
 from torch.cuda.amp import GradScaler
 import torch.nn.functional as F
 
-from taskmodel import TaskFactory
-from environment import Env
-from logutils import Logger
+from isolate_kd.taskmodel import TaskFactory
+from isolate_kd.environment import Env
+from isolate_kd.logutils import Logger
 
 class Runner: 
     def __init__(self):
@@ -136,7 +136,7 @@ class Runner:
     def run_val(self):
         self.model.eval()
         dummy = torch.ones((1, 3), dtype=torch.long, device=self.device)
-        print(self.model(input_ids=dummy, attention_mask=dummy).logits)
+        # print(self.model(input_ids=dummy, attention_mask=dummy).logits)
         if not self.valset.has_val():
             return 0
         vbar = trange(0, len(self.valset)//Env.batch_size, 
