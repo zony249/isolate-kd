@@ -41,7 +41,7 @@ if __name__== "__main__":
                                                                     "training will resume from the previous"
                                                                     "experiment. Otherwise, a new experiment"
                                                                     "will be created.")
-    parser.add_argument("--val-interval", type=str, default=500, help="How many steps between validations. After each validation,"
+    parser.add_argument("--val-interval", type=int, default=500, help="How many steps between validations. After each validation,"
                                                                        "a checkpoint will be created.")
     parser.add_argument("--rebuild-dataset", action="store_true")
     parser.add_argument("--hidden-d", type=int, default=768)
