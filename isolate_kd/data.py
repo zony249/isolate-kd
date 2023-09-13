@@ -163,7 +163,7 @@ class Wikipedia(DatasetBase):
         try:
             if rebuild_dataset:
                 print("Rebuilding dataset...")
-                self.train_data = load_dataset("wikipedia", "20220301.en",)["train"]
+                self.train_data = load_dataset("wikipedia", "20220301.en", cache_dir="data")["train"]
                 self.val_data = None
                 self.save(self.savepath)
                 print(f"Saved dataset to {self.savepath}")
@@ -173,7 +173,7 @@ class Wikipedia(DatasetBase):
                 print(f"Loaded cached dataset from {self.savepath}!")
         except FileNotFoundError:
             print("Cached file not found. Building dataset...")
-            self.train_data = load_dataset("wikipedia", "20220301.en")["train"]
+            self.train_data = load_dataset("wikipedia", "20220301.en", cache_dir="data")["train"]
             self.val_data = None
             self.save(self.savepath)
             print(f"Saved dataset to {self.savepath}.")
