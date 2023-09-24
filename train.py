@@ -11,8 +11,8 @@ import torch.nn.functional as F
 
 from transformers import AutoModel, AutoTokenizer
 
-from isolate_kd.taskmodel import RobertaTaskModel
-from isolate_kd.runner import Runner
+from isolate_kd.taskmodel import RobertaTaskModel, load_basic_model_and_tokenizer, TaskFactory
+from isolate_kd.runner import Runner, KDRunner
 from isolate_kd.environment import Env
 from isolate_kd.logutils import Logger
 
@@ -26,8 +26,10 @@ if __name__== "__main__":
                                                                      "model config")
     parser.add_argument("--data-config", type=str, default="./configs/data.yaml", help="YAML file containing dataset-"
                                                                                      "specific configurations.")
+    parser.add_argument("--mode", type=str, default="finetune", choices=["finetune", "kd"])
     parser.add_argument("--device", type=str, default="cuda", help="Device to use for training.")
     parser.add_argument("--use-fp16", action="store_true", help="Use FP16 mixed precision")
+    
     parser.add_argument("--random-init", action="store_true", help="Randomly initialize the model.")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--epochs", type=int, default=1)
@@ -44,29 +46,40 @@ if __name__== "__main__":
     parser.add_argument("--val-interval", type=int, default=500, help="How many steps between validations. After each validation,"
                                                                        "a checkpoint will be created.")
     parser.add_argument("--rebuild-dataset", action="store_true")
+
+    parser.add_argument("--teacher-path", type=str, default=None, help="Should be loadable using from_pretrained")
     parser.add_argument("--hidden-d", type=int, default=768)
     parser.add_argument("--model-d", type=int, default=3072)
     parser.add_argument("--num-layers", type=int, default=12)
+    parser.add_argument("--kd-coeff", type=float, default=1.0) 
+    parser.add_argument("--ikd-coeff", type=float, default=1.0)
 
     args = parser.parse_args()
 
     Env.set_env(task=args.task, 
                 model_config=args.model_config, 
                 data_config=args.data_config, 
+                mode=args.mode, 
                 device=args.device, 
                 use_fp16=args.use_fp16,
-                random_init=args.random_init, 
+                output_dir=args.output_dir, 
+                exp_name=args.exp_name, 
+
                 batch_size=args.batch_size, 
                 epochs=args.epochs,
                 lr=args.lr, 
                 optim=args.optim, 
-                output_dir=args.output_dir, 
-                exp_name=args.exp_name, 
                 val_interval=args.val_interval, 
                 rebuild_dataset=args.rebuild_dataset,
+
+                random_init=args.random_init, 
                 hidden_d=args.hidden_d, 
                 model_d=args.model_d, 
-                num_layers=args.num_layers)
+                num_layers=args.num_layers,
+
+                teacher_path=args.teacher_path,
+                kd_coeff=args.kd_coeff, 
+                ikd_coeff=args.ikd_coeff)
 
     if Env.exp_name is None:
         Env.exp_name = time.ctime(time.time()) 
@@ -80,7 +93,19 @@ if __name__== "__main__":
     print(*sys.argv)
     Env.info()
 
-    runner = Runner()
+    if Env.mode == "finetune":
+        runner = Runner()
+    elif "kd" in Env.mode:
+        #init teacher        
+        assert Env.teacher_path is not None, "For kd modes, you must specify path to teacher model"
+        teacher, _ = TaskFactory.get_taskmodel_with_pretrained_encoder(Env.task)
+        teacher = teacher.from_pretrained(Env.teacher_path).to(Env.device)
+        if Env.mode == "kd":
+            runner = KDRunner(teacher=teacher) 
+        else:
+            raise NotImplementedError()
+    else:
+        raise ValueError()
     runner.run_loop()
 
 

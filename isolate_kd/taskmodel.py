@@ -61,10 +61,14 @@ class RobertaTaskModel(TaskModelBase):
                  *args, 
                  **kwargs):
         super().__init__(*args, **kwargs)
+        self.hidden_d = self.encoder.config.hidden_size
+        self.model_d = self.encoder.config.intermediate_size
+        self.num_layers = self.encoder.config.num_hidden_layers
 
     def forward(self, *args, **kwargs):
         roberta_output = self.encoder(*args, **kwargs)
         task_head_output = self.task_head(roberta_output[0])
+        # loss is computed elsewhere
         return MLMOutput(
             logits=task_head_output,
             hidden_states=roberta_output.hidden_states,
@@ -83,20 +87,25 @@ class TaskFactory:
         else:
             raise NotImplementedError("task head not implemented")
 
-    def get_new_taskmodel(task:str) -> Tuple[TaskModelBase, PreTrainedTokenizer]:
+    def taskmodel_from_task(task:str, from_pretrained=False):
         if task == "mnli":
-            enc, tok = load_basic_model_and_tokenizer("roberta-base")
+            enc, tok = load_basic_model_and_tokenizer("roberta-base", from_pretrained)
             taskmodel = RobertaTaskModel(enc)
             taskmodel.create_task_specific_head(task, input_dim=enc.config.hidden_size, output_dim=3)
             return taskmodel, tok
         elif "wiki" in task:
-            enc, tok = load_basic_model_and_tokenizer("roberta-base")
+            enc, tok = load_basic_model_and_tokenizer("roberta-base", from_pretrained)
             taskmodel = RobertaTaskModel(enc)
             taskmodel.create_task_specific_head(task, vocab_size=enc.config.vocab_size, hidden_d=enc.config.hidden_size)
             return taskmodel, tok
         else:
             raise NotImplementedError(f"taskmodel not implemented for {task}")
         
+    def get_new_taskmodel(task:str) -> Tuple[TaskModelBase, PreTrainedTokenizer]:
+        return TaskFactory.taskmodel_from_task(task)
+
+    def get_taskmodel_with_pretrained_encoder(task: str) -> Tuple[TaskModelBase, PreTrainedTokenizer]:
+        return TaskFactory.taskmodel_from_task(task, from_pretrained=True)
 
     def get_dataset(task:str, 
                     tok:PreTrainedTokenizer, 
@@ -115,10 +124,10 @@ class TaskFactory:
         else:
             raise NotImplementedError(f"get_dataset is not implemented for {task}")
 
-def load_basic_model_and_tokenizer(name_or_path:str) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
+def load_basic_model_and_tokenizer(name_or_path:str, from_pretrained=False) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
     model = AutoModel.from_pretrained(name_or_path)
     tok = AutoTokenizer.from_pretrained(name_or_path)
-    if Env.random_init: 
+    if not from_pretrained:
         config = model.config
         if Env.hidden_d is not None:
             setattr(config, translate_attr(config.model_type, "hidden_d"), Env.hidden_d)

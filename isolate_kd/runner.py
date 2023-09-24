@@ -10,6 +10,7 @@ from argparse import ArgumentParser, Namespace
 
 import numpy as np
 import torch
+from torch import nn
 from torch.utils.data import DataLoader, Dataset 
 from torch.optim import AdamW, Adam, SGD
 from torch.cuda.amp import GradScaler
@@ -19,12 +20,23 @@ from isolate_kd.taskmodel import TaskFactory
 from isolate_kd.environment import Env
 from isolate_kd.logutils import Logger
 
+LAYER_MAPPING = {
+    2: [5, 11], 
+    3: [3, 7, 11], 
+    4: [2, 5, 8, 11], 
+    6: [1, 3, 5, 7, 9, 11], 
+    12: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 
+}
+
+
+
 class Runner: 
     def __init__(self):
         self.task = Env.task
         self.device = Env.device
 
-        self.model, self.tok = TaskFactory.get_new_taskmodel(self.task)
+        self.model, self.tok = TaskFactory.get_new_taskmodel(self.task) if Env.random_init \
+            else TaskFactory.get_taskmodel_with_pretrained_encoder(self.task)
         self.model = self.model.to(self.device)
         self.optim = self.create_optim(self.model)        
         self.scaler = GradScaler() 
@@ -54,13 +66,7 @@ class Runner:
 
         try:
             # load state and continue training 
-            (optim_state_dict, 
-            scaler_state_dict,
-            self.step_id, 
-            self.epoch_id, 
-            self.total_steps) = self.load_train_state(path.join(pathname, "trainstate.pt"))
-            self.optim.load_state_dict(optim_state_dict)
-            self.scaler.load_state_dict(scaler_state_dict)
+            self.load_train_state(path.join(pathname, "trainstate.pt"))
             self.model.from_pretrained(pathname)
             self.model = self.model.to(self.device)
             print(f"Continuing training from epoch {self.epoch_id}, step {self.step_id}.")
@@ -90,25 +96,28 @@ class Runner:
                     metric = self.run_val()
                     self.set_checkpoint(path.join(Env.output_dir, Env.exp_name), 
                                         self.model)
+                    # somehow set the best checkpoint
             self.step_id = 0
-    def forward_pass(self, model, input_ids, attention_mask, labels):
+    def forward_pass(self, model, input_ids, attention_mask, labels=None, output_hidden_states=False):
         if Env.use_fp16:
             with torch.autocast(self.device):
                 outputs = model(
                     input_ids=input_ids, 
                     attention_mask=attention_mask, 
-                    output_hidden_states=False)
-                y = outputs.logits
-                loss = F.cross_entropy(y.reshape(-1, y.shape[-1]), labels.view(-1))
-                outputs.loss = loss
+                    output_hidden_states=output_hidden_states)
+                if labels is not None:
+                    y = outputs.logits
+                    loss = F.cross_entropy(y.reshape(-1, y.shape[-1]), labels.view(-1))
+                    outputs.loss = loss
         else:
             outputs = model(
                 input_ids=input_ids, 
                 attention_mask=attention_mask, 
-                output_hidden_states=False)
-            y = outputs.logits
-            loss = F.cross_entropy(y.reshape(-1, y.shape[-1]), labels.view(-1))
-            outputs.loss = loss
+                output_hidden_states=output_hidden_states)
+            if labels is not None:
+                y = outputs.logits
+                loss = F.cross_entropy(y.reshape(-1, y.shape[-1]), labels.view(-1))
+                outputs.loss = loss
         return outputs
     def backward_pass_and_step(self, loss, optim):
         if Env.use_fp16:
@@ -121,6 +130,9 @@ class Runner:
 
     ## TODO
     def train_forward(self, batch, step_id): 
+        """
+        should be implemented for each runner subclass
+        """
         self.model.train() 
         x, attn_mask, t = batch 
         x = x.to(self.device)
@@ -134,6 +146,9 @@ class Runner:
         return outputs.loss.item()
 
     def run_val(self):
+        """
+        Should be implemented for each runner subclass
+        """
         self.model.eval()
         dummy = torch.ones((1, 3), dtype=torch.long, device=self.device)
         # print(self.model(input_ids=dummy, attention_mask=dummy).logits)
@@ -145,15 +160,26 @@ class Runner:
         loss_accum = []
         for step in vbar:
             batch = next(iter_vloader)
-            loss = self.val_forward(batch, step)
+            x, attn_mask, t = batch 
+            x = x.to(self.device)
+            attn_mask = attn_mask.to(self.device)
+            t = t.to(self.device)
+            outputs = self.forward_pass(batch, x, attn_mask, t)
+
+            # compute loss (TODO)
+            #
+            #
+
+            loss = 0
             vbar.set_postfix(loss=f"{loss:.4f}", refresh=False)
             loss_accum.append(loss)
         return np.mean(loss_accum)
          
-    def val_forward(self):
-        pass
     
-    def create_optim(self, model): 
+    def create_optim(self, model):
+        """
+        should be implemented for each subclass
+        """ 
         if Env.optim == "adamw":
             optim = AdamW(model.parameters(), lr=Env.lr)
         elif Env.optim == "adam":
@@ -165,6 +191,9 @@ class Runner:
         return optim
     
     def save_train_state(self, fpath):
+        """
+        should be implemented for each runner subclass
+        """
         torch.save({
             "optim": self.optim.state_dict(), 
             "scaler": self.scaler.state_dict(), 
@@ -174,13 +203,15 @@ class Runner:
             }, fpath)
 
     def load_train_state(self, fpath):
+        """
+        should be implemented for each runner subclass
+        """
         ckpt = torch.load(fpath)
-        optim_state = ckpt["optim"]
-        scaler_state = ckpt["scaler"]
-        step_id = ckpt["step_id"]
-        epoch_id = ckpt["epoch_id"]
-        total_steps = ckpt["total_steps"]
-        return optim_state, scaler_state, step_id, epoch_id, total_steps 
+        self.optim.load_state_dict(ckpt["optim"])
+        self.scaler.load_state_dict(ckpt["scaler"])
+        self.step_id = ckpt["step_id"]
+        self.epoch_id = ckpt["epoch_id"]
+        self.total_steps = ckpt["total_steps"]
 
     def set_checkpoint(self, 
                         exp_path: str, 
@@ -190,6 +221,106 @@ class Runner:
         print(f"checkpoint set: step_id: {self.step_id}, epoch_id: {self.epoch_id}, total_steps: {self.total_steps}")
         
         
+
+class KDRunner(Runner):
+    def __init__(self, teacher, *args, **kwargs):
+        self.adapters = nn.ModuleList([nn.Linear(Env.hidden_d, teacher.hidden_d, device=Env.device) 
+                                       for _ in range(Env.num_layers)])
+        # adapter parameter groups are implicitly added
+        super().__init__(*args, **kwargs)
+        self.teacher = teacher
+
+    def train_forward(self, batch, step_id): 
+        self.model.train() 
+        x, attn_mask, t = batch 
+        x = x.to(self.device)
+        attn_mask = attn_mask.to(self.device)
+        t = t.to(self.device)
+        
+        with torch.no_grad():
+            teacher_outputs = self.forward_pass(self.teacher, x, attn_mask, output_hidden_states=True)
+        student_outputs = self.forward_pass(self.model, x, attn_mask, t, output_hidden_states=True)
+        student_h_transformed = [self.adapters[i](h) for i, h in enumerate(student_outputs.hidden_states[1:])]
+        student_outputs.hidden_states = (student_outputs.hidden_states[0],) + tuple(student_h_transformed)
+
+        # kl loss 
+        kl_loss = kl_div(teacher_outputs.logits, student_outputs.logits, attn_mask)
+        # ikd loss
+        ikd_loss = hidden_loss(teacher_outputs.hidden_states, 
+                               student_outputs.hidden_states, 
+                               attn_mask=attn_mask, 
+                               include_embed=False)
+
+            
+
+        loss = student_outputs.loss + Env.kd_coeff * kl_loss + Env.ikd_coeff * ikd_loss
+        adapter_weights_norm = self.adapters[0].weight.norm()
+        self.backward_pass_and_step(loss, self.optim)
+        self.optim.zero_grad(set_to_none=True)
+        self.step_id = step_id
+        self.total_steps += 1
+        return student_outputs.loss.item()
+
+
+    def save_train_state(self, fpath):
+        """
+        should be implemented for each runner subclass
+        """
+        torch.save({
+            "optim": self.optim.state_dict(), 
+            "scaler": self.scaler.state_dict(), 
+            "step_id": self.step_id, 
+            "epoch_id": self.epoch_id, 
+            "total_steps": self.total_steps,
+            "adapters": self.adapters.state_dict(),
+            }, fpath)
+
+    def load_train_state(self, fpath):
+        """
+        should be implemented for each runner subclass
+        """
+        ckpt = torch.load(fpath)
+        self.optim.load_state_dict(ckpt["optim"])
+        self.scaler.load_state_dict(ckpt["scaler"])
+        self.step_id = ckpt["step_id"]
+        self.epoch_id = ckpt["epoch_id"]
+        self.total_steps = ckpt["total_steps"]
+        self.adapters.load_state_dict(ckpt["adapters"])
+
+    def create_optim(self, model):
+        optim =  super().create_optim(model)
+        optim.add_param_group({"params": self.adapters.parameters(), "lr" : Env.lr}) 
+        return optim
+
+
+
+################# FUNCTIONAL ##################
+def kl_div(p, q, attn_mask):
+    p = F.log_softmax(p * attn_mask[:, :, None], dim=-1)
+    q = F.log_softmax(q* attn_mask[:, :, None], dim=-1)
+    scale = attn_mask.sum() / (attn_mask.shape[0] * attn_mask.shape[1])
+    return (p.exp() * (p - q)).sum(dim=-1).mean() / scale
+
+
+def hidden_loss(t_hidden, s_hidden, attn_mask, include_embed=False):
+    if include_embed:
+        s_h = s_hidden
+        t_h = t_hidden 
+    else:
+        s_h = s_hidden[1:]
+        t_h = t_hidden[1:]
+    # map
+    t_h = [t_h[i]  for i in LAYER_MAPPING[len(s_h)]]
+    s_h = [s for s in s_h]
+    
+    assert len(t_h) == len(s_h)
+    assert t_h[0].shape[-1] == s_h[0].shape[-1], "Channel-wise dimensions must match"
+
+    stacked_pointwise_mse = torch.stack([(t-s)*(t-s) for t, s in zip(t_h, s_h)], dim=0) 
+    mse = (stacked_pointwise_mse * attn_mask[None, :, :, None]).sum() / (attn_mask.shape[0] * attn_mask.shape[1] * t_hidden[0].shape[-1])
+    return mse
+
+
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Runner")
