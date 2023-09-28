@@ -30,7 +30,6 @@ if __name__== "__main__":
     parser.add_argument("--device", type=str, default="cuda", help="Device to use for training.")
     parser.add_argument("--use-fp16", action="store_true", help="Use FP16 mixed precision")
     
-    parser.add_argument("--random-init", action="store_true", help="Randomly initialize the model.")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--lr", type=float, default=1e-5)
@@ -47,6 +46,7 @@ if __name__== "__main__":
                                                                        "a checkpoint will be created.")
     parser.add_argument("--rebuild-dataset", action="store_true")
 
+    parser.add_argument("--pretrained-ckpt", type=str, default=None)
     parser.add_argument("--teacher-path", type=str, default=None, help="Should be loadable using from_pretrained")
     parser.add_argument("--hidden-d", type=int, default=768)
     parser.add_argument("--model-d", type=int, default=3072)
@@ -72,7 +72,7 @@ if __name__== "__main__":
                 val_interval=args.val_interval, 
                 rebuild_dataset=args.rebuild_dataset,
 
-                random_init=args.random_init, 
+                pretrained_ckpt=args.pretrained_ckpt,
                 hidden_d=args.hidden_d, 
                 model_d=args.model_d, 
                 num_layers=args.num_layers,
@@ -98,8 +98,8 @@ if __name__== "__main__":
     elif "kd" in Env.mode:
         #init teacher        
         assert Env.teacher_path is not None, "For kd modes, you must specify path to teacher model"
-        teacher, _ = TaskFactory.get_taskmodel_with_pretrained_encoder(Env.task)
-        teacher = teacher.from_pretrained(Env.teacher_path).to(Env.device)
+        teacher, _ = TaskFactory.get_taskmodel(Env.task, args.teacher_path)
+        teacher = teacher.to(Env.device)
         if Env.mode == "kd":
             runner = KDRunner(teacher=teacher) 
         else:

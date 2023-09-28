@@ -35,8 +35,8 @@ class Runner:
         self.task = Env.task
         self.device = Env.device
 
-        self.model, self.tok = TaskFactory.get_new_taskmodel(self.task) if Env.random_init \
-            else TaskFactory.get_taskmodel_with_pretrained_encoder(self.task)
+        self.model, self.tok = TaskFactory.get_new_taskmodel(self.task) if Env.pretrained_ckpt is None \
+            else TaskFactory.get_taskmodel(self.task, Env.pretrained_ckpt)
         self.model = self.model.to(self.device)
         self.optim = self.create_optim(self.model)        
         self.scaler = GradScaler() 

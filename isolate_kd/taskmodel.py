@@ -87,14 +87,14 @@ class TaskFactory:
         else:
             raise NotImplementedError("task head not implemented")
 
-    def taskmodel_from_task(task:str, from_pretrained=False):
+    def get_taskmodel(task:str, name_or_path=None):
         if task == "mnli":
-            enc, tok = load_basic_model_and_tokenizer("roberta-base", from_pretrained)
+            enc, tok = load_basic_model_and_tokenizer("roberta-base", name_or_path)
             taskmodel = RobertaTaskModel(enc)
             taskmodel.create_task_specific_head(task, input_dim=enc.config.hidden_size, output_dim=3)
             return taskmodel, tok
         elif "wiki" in task:
-            enc, tok = load_basic_model_and_tokenizer("roberta-base", from_pretrained)
+            enc, tok = load_basic_model_and_tokenizer("roberta-base", name_or_path)
             taskmodel = RobertaTaskModel(enc)
             taskmodel.create_task_specific_head(task, vocab_size=enc.config.vocab_size, hidden_d=enc.config.hidden_size)
             return taskmodel, tok
@@ -102,10 +102,7 @@ class TaskFactory:
             raise NotImplementedError(f"taskmodel not implemented for {task}")
         
     def get_new_taskmodel(task:str) -> Tuple[TaskModelBase, PreTrainedTokenizer]:
-        return TaskFactory.taskmodel_from_task(task)
-
-    def get_taskmodel_with_pretrained_encoder(task: str) -> Tuple[TaskModelBase, PreTrainedTokenizer]:
-        return TaskFactory.taskmodel_from_task(task, from_pretrained=True)
+        return TaskFactory.get_taskmodel(task, None)
 
     def get_dataset(task:str, 
                     tok:PreTrainedTokenizer, 
@@ -124,20 +121,45 @@ class TaskFactory:
         else:
             raise NotImplementedError(f"get_dataset is not implemented for {task}")
 
-def load_basic_model_and_tokenizer(name_or_path:str, from_pretrained=False) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
-    model = AutoModel.from_pretrained(name_or_path)
-    tok = AutoTokenizer.from_pretrained(name_or_path)
-    if not from_pretrained:
-        config = model.config
-        if Env.hidden_d is not None:
-            setattr(config, translate_attr(config.model_type, "hidden_d"), Env.hidden_d)
-        if Env.model_d is not None: 
-            setattr(config, translate_attr(config.model_type, "model_d"), Env.model_d)
-        if Env.num_layers is not None: 
-            setattr(config, translate_attr(config.model_type, "num_hidden_layers"), Env.num_layers)
-        if Env.model_config is not None:
-            config = Env.model_config
-        model = AutoModel.from_config(config)
+# def load_basic_model_and_tokenizer(name_or_path:str, from_pretrained=False) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
+#     model = AutoModel.from_pretrained(name_or_path)
+#     tok = AutoTokenizer.from_pretrained(name_or_path)
+#     if not from_pretrained:
+#         config = model.config
+#         if Env.hidden_d is not None:
+#             setattr(config, translate_attr(config.model_type, "hidden_d"), Env.hidden_d)
+#         if Env.model_d is not None: 
+#             setattr(config, translate_attr(config.model_type, "model_d"), Env.model_d)
+#         if Env.num_layers is not None: 
+#             setattr(config, translate_attr(config.model_type, "num_hidden_layers"), Env.num_layers)
+#         if Env.model_config is not None:
+#             config = Env.model_config
+#         model = AutoModel.from_config(config)
+#     return model, tok
+
+def load_basic_model_and_tokenizer(basis: str, name_or_path: str = None):
+    """
+    basis: What the model is based off of. For example, you can base
+            your model off of roberta-base
+    name_or_path: path to huggingface-loadable model or huggingface id.
+            If None, then randomly initialize the model
+    """
+    model = AutoModel.from_pretrained(basis)
+    tok = AutoTokenizer.from_pretrained(basis)
+    config = model.config 
+
+    if Env.hidden_d is not None:
+        setattr(config, translate_attr(config.model_type, "hidden_d"), Env.hidden_d)
+    if Env.model_d is not None: 
+        setattr(config, translate_attr(config.model_type, "model_d"), Env.model_d)
+    if Env.num_layers is not None: 
+        setattr(config, translate_attr(config.model_type, "num_hidden_layers"), Env.num_layers)
+    if Env.model_config is not None:
+        config = Env.model_config
+
+    model = AutoModel.from_config(config)
+    if name_or_path is not None:
+        model = model.from_pretrained(name_or_path)
     return model, tok
 
 def translate_attr(model_type:str, attr_from:str):

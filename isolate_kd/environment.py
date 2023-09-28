@@ -29,7 +29,7 @@ class Env:
     hidden_d = None
     model_d = None
     num_layers = None
-    random_init = False
+    pretrained_ckpt = None
 
     #kd arguments
     teacher_path=None 
