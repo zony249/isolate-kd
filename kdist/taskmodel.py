@@ -14,8 +14,8 @@ import transformers
 from transformers import AutoModel, AutoConfig, AutoTokenizer
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
-from isolate_kd.data import DatasetBase, MultiNLI, Wikipedia
-from isolate_kd.environment import Env
+from kdist.data import DatasetBase, MultiNLI, Wikipedia
+from kdist.environment import Env
 
 class TaskModelBase(nn.Module):
     def __init__(self, 

@@ -9,8 +9,8 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 setup(
-    name = "isolate-kd",
-    version = "0.0.4",
+    name = "kdist",
+    version = "0.0.5",
     author = "Zony Yu",
     author_email = "zony249@gmail.com",
     description = ("Implements layer-isolated KD"), 

@@ -16,9 +16,9 @@ from torch.optim import AdamW, Adam, SGD
 from torch.cuda.amp import GradScaler
 import torch.nn.functional as F
 
-from isolate_kd.taskmodel import TaskFactory
-from isolate_kd.environment import Env
-from isolate_kd.logutils import Logger
+from kdist.taskmodel import TaskFactory
+from kdist.environment import Env
+from kdist.logutils import Logger
 
 LAYER_MAPPING = {
     2: [5, 11], 

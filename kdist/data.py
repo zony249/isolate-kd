@@ -20,8 +20,8 @@ from transformers import (
     PreTrainedTokenizer
 )
 
-from isolate_kd.glue.src.tasks import MultiNLITask
-from isolate_kd.environment import Env
+from kdist.glue.src.tasks import MultiNLITask
+from kdist.environment import Env
 
 class DatasetBase(Dataset):
     def __init__(self, 

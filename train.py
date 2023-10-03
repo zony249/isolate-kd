@@ -11,10 +11,10 @@ import torch.nn.functional as F
 
 from transformers import AutoModel, AutoTokenizer
 
-from isolate_kd.taskmodel import RobertaTaskModel, load_basic_model_and_tokenizer, TaskFactory
-from isolate_kd.runner import Runner, KDRunner
-from isolate_kd.environment import Env
-from isolate_kd.logutils import Logger
+from kdist.taskmodel import RobertaTaskModel, load_basic_model_and_tokenizer, TaskFactory
+from kdist.runner import Runner, KDRunner
+from kdist.environment import Env
+from kdist.logutils import Logger
 
 
 
